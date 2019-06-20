@@ -79,5 +79,51 @@ class ACViewModel {
         task.resume()
     }
     
+    func fetchEventsRx(repo: String) {
+        
+        let response = Observable.from([repo])
+            .map { urlString -> URL in
+                return URL(string: "https://api.github.com/repos/\(urlString)/events")!
+            }
+            .map { url -> URLRequest in
+                return URLRequest(url: url)
+            }
+            .flatMap { request -> Observable<(HTTPURLResponse, Data)> in
+                return URLSession.shared.rx.response(request: (request))
+            }
+            .shareReplay(1)
+        
+        response
+            .filter { response, dontCareAboutThisData -> Bool in
+                print("\(dontCareAboutThisData)")
+                return 200..<300 ~= response.statusCode
+            }
+            .map { dontCareAboutThisResponse, data -> [[String: Any]] in
+                print("\(dontCareAboutThisResponse)")
+                guard let jsonObject = try? JSONSerialization.jsonObject(with: data, options: []),
+                    let result = jsonObject as? [[String: Any]] else {
+                        return []
+                }
+                return result
+            }
+            .filter { objects in
+                return objects.count > 0
+            }
+            .map { objects in
+                return objects.flatMap {
+                    print("\($0)")
+                    return Event(dictionary: $0)
+                    
+                }
+            }
+            .subscribe(onNext: { [weak self] newEvents in
+                DispatchQueue.main.async {
+                    self?.processEvents(newEvents)
+                }
+            })
+            
+            .addDisposableTo(bag)
+    }
+    
 }
 

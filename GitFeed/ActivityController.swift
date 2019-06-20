@@ -28,15 +28,23 @@ class ActivityController: UITableViewController {
         refreshControl.attributedTitle = NSAttributedString(string: "Pull to refresh")
         refreshControl.addTarget(self, action: #selector(refresh), for: .valueChanged)
         
+        // Using Native urlsession (needs Dispatch.main.async to process)
         //viewModel.fetchGitFeedEvents(repo: repo)
-        viewModel.fetchObjectsNative(repo: repo)
+        
+        // Using Alamofire urlsession
+        //viewModel.fetchObjectsNative(repo: repo)
+        //bindUI()
+        
+        // Using RX urlsession
+        viewModel.fetchEventsRx(repo: repo)
         bindUI()
         
         // refresh()
+        // bindUI()
     }
     
     @objc func refresh() {
-        fetchEvents(repo: repo)
+        viewModel.fetchEventsRx(repo: repo)
     }
     
     func bindUI() {
@@ -49,54 +57,8 @@ class ActivityController: UITableViewController {
             .addDisposableTo(bag)
     }
     
-    
-    
-    func fetchEvents(repo: String) {
-        
-        let response = Observable.from([repo])
-            .map { urlString -> URL in
-                return URL(string: "https://api.github.com/repos/\(urlString)/events")!
-            }
-            .map { url -> URLRequest in
-                return URLRequest(url: url)
-            }
-            .flatMap { request -> Observable<(HTTPURLResponse, Data)> in
-                return URLSession.shared.rx.response(request: (request))
-            }
-            .shareReplay(1)
-        
-        response
-            .filter { response, dontCareAboutThisData -> Bool in
-                print("\(dontCareAboutThisData)")
-                return 200..<300 ~= response.statusCode
-            }
-            .map { dontCareAboutThisResponse, data -> [[String: Any]] in
-                print("\(dontCareAboutThisResponse)")
-                guard let jsonObject = try? JSONSerialization.jsonObject(with: data, options: []),
-                    let result = jsonObject as? [[String: Any]] else {
-                        return []
-                }
-                return result
-            }
-            .filter { objects in
-                return objects.count > 0
-            }
-            .map { objects in
-                return objects.flatMap {
-                    print("\($0)")
-                    return Event(dictionary: $0)
-                    
-                }
-            }
-            .subscribe(onNext: { [weak self] newEvents in
-                self?.processEvents(newEvents)
-            })
-            
-            .addDisposableTo(bag)
-        
-        
-    }
-    
+
+    // MARK: - This was old way if you didn't use bindings
     func processEvents(_ newEvents: [Event]) {
         var updatedEvents = newEvents + events.value
         if updatedEvents.count > 50 {
@@ -110,6 +72,7 @@ class ActivityController: UITableViewController {
         }
     }
     
+    //MARK: - This is not needed because of use of bindings
 //    // MARK: - Table Data Source
 //    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
 //        return events.value.count
